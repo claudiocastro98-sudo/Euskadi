@@ -1,0 +1,157 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  SUPERVISOR
+  OPERATOR
+  VIEWER
+}
+
+enum GuardStatus {
+  ACTIVE
+  INACTIVE
+  ON_LEAVE
+}
+
+enum ProcedureStatus {
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  ON_LEAVE
+  REST_DAY
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  passwordHash String     @map("password_hash")
+  role         UserRole   @default(OPERATOR)
+  active       Boolean    @default(true)
+  auditLogs    AuditLog[]
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Guard {
+  id                   String       @id @default(cuid())
+  fullName             String       @map("full_name")
+  rut                  String       @unique
+  birthDate            DateTime?    @map("birth_date") @db.Date
+  phone                String?
+  role                 String?
+  location             String?
+  hireDate             DateTime?    @map("hire_date") @db.Date
+  osExpiryDate         DateTime?    @map("os_expiry_date") @db.Date
+  status               GuardStatus  @default(ACTIVE)
+  emergencyContactName String?      @map("emergency_contact_name")
+  emergencyContactTel  String?      @map("emergency_contact_tel")
+  address              String?
+  commune              String?
+  cycleStartDate       DateTime?    @map("cycle_start_date") @db.Date
+  shift                String?
+  procedures           Procedure[]
+  attendances          Attendance[]
+  absences             Absence[]
+  createdAt            DateTime     @default(now()) @map("created_at")
+  updatedAt            DateTime     @updatedAt @map("updated_at")
+
+  @@index([fullName])
+  @@index([status])
+  @@map("guards")
+}
+
+model Procedure {
+  id                  String          @id @default(cuid())
+  number              String          @unique
+  occurredAt          DateTime        @map("occurred_at")
+  location            String
+  sector              String?
+  type                String
+  guardId             String?         @map("guard_id")
+  guard               Guard?          @relation(fields: [guardId], references: [id], onDelete: SetNull)
+  product             String?
+  quantity            Int             @default(1)
+  amount              Decimal         @default(0) @db.Decimal(12, 2)
+  recoveredAmount     Decimal         @default(0) @map("recovered_amount") @db.Decimal(12, 2)
+  policeReportNumber  String?         @map("police_report_number")
+  detention           Boolean         @default(false)
+  policeInvolved      Boolean         @default(false) @map("police_involved")
+  observations        String?
+  status              ProcedureStatus @default(OPEN)
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+
+  @@index([occurredAt])
+  @@index([location, sector])
+  @@index([guardId])
+  @@map("procedures")
+}
+
+model Attendance {
+  id                 String           @id @default(cuid())
+  guardId            String           @map("guard_id")
+  guard              Guard            @relation(fields: [guardId], references: [id], onDelete: Restrict)
+  date               DateTime         @db.Date
+  scheduledStart     String?          @map("scheduled_start")
+  actualStart        DateTime?        @map("actual_start")
+  actualEnd          DateTime?        @map("actual_end")
+  baseMinutes        Int              @default(480) @map("base_minutes")
+  workedMinutes      Int?             @map("worked_minutes")
+  overtimeMinutes    Int              @default(0) @map("overtime_minutes")
+  lateMinutes        Int              @default(0) @map("late_minutes")
+  shiftType          String?          @map("shift_type")
+  status             AttendanceStatus @default(PRESENT)
+  overtimeAuthorized Boolean          @default(false) @map("overtime_authorized")
+  supervisorName     String?          @map("supervisor_name")
+  reason             String?
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+
+  @@unique([guardId, date])
+  @@index([date])
+  @@map("attendances")
+}
+
+model Absence {
+  id        String   @id @default(cuid())
+  guardId   String   @map("guard_id")
+  guard     Guard    @relation(fields: [guardId], references: [id], onDelete: Restrict)
+  date      DateTime @db.Date
+  reason    String
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([guardId, date])
+  @@index([date])
+  @@map("absences")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?  @map("user_id")
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
